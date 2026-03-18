@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <title>ChatRoom</title>
+    <script src="https://cdn.ably.com/lib/ably.min-2.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            position: fixed;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            color: #fff;
+        }
+
+        /* Login Screen */
+        .login-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            gap: 24px;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            animation: slideInUp 0.6s ease-out;
+        }
+
+        .login-container.hidden {
+            display: none;
+        }
+
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .login-header {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .login-header h1 {
+            font-size: 44px;
+            color: #fff;
+            margin-bottom: 8px;
+            font-weight: 700;
+            letter-spacing: -1.5px;
+        }
+
+        .login-header p {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 15px;
+            font-weight: 400;
+            letter-spacing: -0.3px;
+        }
+
+        .input-group {
+            width: 100%;
+            max-width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .input-group label {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .input-group input {
+            padding: 14px 18px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(20px);
+            border-radius: 14px;
+            font-size: 16px;
+            color: #fff;
+            font-weight: 500;
+            -webkit-appearance: none;
+            appearance: none;
+            transition: all 0.2s ease;
+        }
+
+        .input-group input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .input-group input:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(10, 132, 255, 0.5);
+            box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.1);
+        }
+
+        .login-btn {
+            width: 100%;
+            max-width: 300px;
+            padding: 14px 24px;
+            background: linear-gradient(135deg, #0a84ff 0%, #0051d5 100%);
+            color: white;
+            border: none;
+            border-radius: 14px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: inherit;
+            -webkit-appearance: none;
+            appearance: none;
+            letter-spacing: -0.3px;
+            box-shadow: 0 4px 12px rgba(10, 132, 255, 0.3);
+        }
+
+        .login-btn:active {
+            transform: scale(0.98);
+            box-shadow: 0 2px 6px rgba(10, 132, 255, 0.2);
+        }
+
+        .login-btn:disabled {
+            opacity: 0.6;
+        }
+
+        .error-message {
+            padding: 12px 16px;
+            background: rgba(255, 59, 48, 0.1);
+            border: 1px solid rgba(255, 59, 48, 0.2);
+            border-radius: 12px;
+            color: #ff3b30;
+            font-size: 13px;
+            display: none;
+            width: 100%;
+            max-width: 300px;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .error-message.show {
+            display: block;
+            animation: slideInUp 0.3s ease-out;
+        }
+
+        /* Main Chat Layout */
+        .main-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            overflow: hidden;
+            background: #000;
+            position: relative;
+        }
+
+        .main-container.hidden {
+            display: none;
+        }
+
+        /* Sidebar Overlay */
+        .sidebar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 99;
+        }
+
+        .sidebar-overlay.active {
+            background: rgba(0, 0, 0, 0.4);
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 280px;
+            height: 100%;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            border-right: 1px solid rgba(255, 255, 255, 0.08);
+            z-index: 100;
+            transform: translateX(-100%);
+            transition: transform 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sidebar.active {
+            transform: translateX(0);
+        }
+
+        .sidebar-header {
+            padding: 20px 20px 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            flex-shrink: 0;
+        }
+
+        .sidebar-header h2 {
+            font-size: 28px;
+            color: #fff;
+            font-weight: 700;
+            letter-spacing: -1px;
+            margin-bottom: 4px;
+        }
+
+        .user-badge-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: 500;
+        }
+
+        .user-badge-dot {
+            width: 8px;
+            height: 8px;
+            background: #34c759;
+            border-radius: 50%;
+            box-shadow: 0 0 6px rgba(52, 199, 89, 0.5);
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 16px;
+        }
+
+        .sidebar-content::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .sidebar-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+        }
+
+        .sidebar-section {
+            margin-bottom: 24px;
+        }
+
+        .sidebar-section-title {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+            padding: 0 4px;
+        }
+
+        .chat-item {
+            padding: 12px 12px;
+            margin-bottom: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid transparent;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .chat-item:active {
+            background: rgba(10, 132, 255, 0.1);
+            border-color: rgba(10, 132, 255, 0.3);
+        }
+
+        .chat-item.active {
+            background: linear-gradient(135deg, rgba(10, 132, 255, 0.15) 0%, rgba(0, 102, 255, 0.1) 100%);
+            border-color: rgba(10, 132, 255, 0.4);
+        }
+
+        .chat-item-badge {
+            width: 10px;
+            height: 10px;
+            background: #34c759;
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 0 6px rgba(52, 199, 89, 0.5);
+        }
+
+        .chat-item-name {
+            color: #fff;
+            font-size: 15px;
+            font-weight: 500;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            letter-spacing: -0.3px;
+        }
+
+        .sidebar-footer {
+            padding: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            flex-shrink: 0;
+        }
+
+        .logout-btn {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255, 59, 48, 0.1);
+            border: 1px solid rgba(255, 59, 48, 0.2);
+            color: #ff3b30;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            -webkit-appearance: none;
+            appearance: none;
+            font-family: inherit;
+            transition: all 0.2s ease;
+            letter-spacing: -0.3px;
+        }
+
+        .logout-btn:active {
+            background: rgba(255, 59, 48, 0.15);
+        }
+
+        /* Users List Panel */
+        .users-panel {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: #000;
+        }
+
+        .users-header {
+            padding: 14px 16px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .users-header h2 {
+            font-size: 32px;
+            color: #fff;
+            font-weight: 700;
+            letter-spacing: -1px;
+        }
+
+        .menu-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 8px 10px;
+            border-radius: 10px;
+            -webkit-appearance: none;
+            appearance: none;
+            font-family: inherit;
+            transition: all 0.2s ease;
+        }
+
+        .menu-btn:active {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .users-list-container {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 0 8px;
+        }
+
+        .users-list-container::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .users-list-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+        }
+
+        .user-item {
+            padding: 12px 12px;
+            margin: 6px 4px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .user-item:active {
+            background: rgba(10, 132, 255, 0.1);
+            border-color: rgba(10, 132, 255, 0.3);
+        }
+
+        .user-item.active {
+            background: linear-gradient(135deg, rgba(10, 132, 255, 0.15) 0%, rgba(0, 102, 255, 0.1) 100%);
+            border-color: rgba(10, 132, 255, 0.4);
+        }
+
+        .user-badge-online {
+            width: 10px;
+            height: 10px;
+            background: #34c759;
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 0 6px rgba(52, 199, 89, 0.5);
+        }
+
+        .user-item-name {
+            color: #fff;
+            font-size: 15px;
+            font-weight: 500;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            letter-spacing: -0.3px;
+        }
+
+        /* Chat Panel */
+        .chat-panel {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: #000;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .chat-panel.active {
+            opacity: 1;
+            pointer-events: auto;
+            position: relative;
+        }
+
+        .chat-header {
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .back-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #0a84ff;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 8px 10px;
+            font-weight: 600;
+            font-family: inherit;
+            -webkit-appearance: none;
+            appearance: none;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .back-btn:active {
+            background: rgba(10, 132, 255, 0.1);
+        }
+
+        .chat-header h2 {
+            font-size: 16px;
+            color: #fff;
+            font-weight: 600;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            letter-spacing: -0.3px;
+        }
+
+        .chat-user-status {
+            width: 10px;
+            height: 10px;
+            background: #34c759;
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 0 6px rgba(52, 199, 89, 0.5);
+        }
+
+        /* Messages Container */
+        .messages-container {
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 12px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: #000;
+        }
+
+        .messages-container::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .messages-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+        }
+
+        .message {
+            display: flex;
+            gap: 8px;
+            animation: slideIn 0.2s ease;
+            min-height: fit-content;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.own {
+            flex-direction: row-reverse;
+            justify-content: flex-end;
+        }
+
+        .message-bubble {
+            padding: 10px 14px;
+            border-radius: 20px;
+            font-size: 15px;
+            line-height: 1.4;
+            word-wrap: break-word;
+            word-break: break-word;
+            font-weight: 400;
+            max-width: 85%;
+            -webkit-user-select: text;
+            user-select: text;
+            letter-spacing: -0.3px;
+        }
+
+        .message:not(.own) .message-bubble {
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .message.own .message-bubble {
+            background: linear-gradient(135deg, #0a84ff 0%, #0051d5 100%);
+            color: white;
+            border: none;
+            box-shadow: 0 2px 8px rgba(10, 132, 255, 0.25);
+        }
+
+        .message-username {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            font-weight: 600;
+            padding: 0 14px;
+            margin-bottom: 2px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .message.own .message-username {
+            color: #0a84ff;
+        }
+
+        .message-content {
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        .message.own .message-content {
+            align-items: flex-end;
+        }
+
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: rgba(255, 255, 255, 0.3);
+            text-align: center;
+            font-size: 15px;
+            padding: 20px;
+            font-weight: 400;
+        }
+
+        /* Input Area */
+        .input-container {
+            padding: 12px 12px 20px;
+            background: #000;
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+            flex-shrink: 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .message-input-group {
+            flex: 1;
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .message-input-group input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 20px;
+            font-size: 15px;
+            color: #fff;
+            font-weight: 400;
+            max-height: 80px;
+            resize: none;
+            -webkit-appearance: none;
+            appearance: none;
+            font-family: inherit;
+            min-height: 34px;
+            transition: all 0.2s ease;
+        }
+
+        .message-input-group input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .message-input-group input:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(10, 132, 255, 0.4);
+            box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.1);
+        }
+
+        .send-btn {
+            padding: 8px;
+            background: linear-gradient(135deg, #0a84ff 0%, #0051d5 100%);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            flex-shrink: 0;
+            -webkit-appearance: none;
+            appearance: none;
+            font-family: inherit;
+            box-shadow: 0 2px 8px rgba(10, 132, 255, 0.25);
+        }
+
+        .send-btn:active {
+            transform: scale(0.92);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+        }
+
+        @supports (padding: max(0px)) {
+            body {
+                padding-top: max(0px, env(safe-area-inset-top));
+                padding-bottom: max(0px, env(safe-area-inset-bottom));
+                padding-left: max(0px, env(safe-area-inset-left));
+                padding-right: max(0px, env(safe-area-inset-right));
+            }
+
+            .input-container {
+                padding-bottom: max(20px, env(safe-area-inset-bottom));
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div class="login-container" id="loginContainer">
+        <div class="login-header">
+            <h1>Chat</h1>
+            <p>Nachrichten senden & empfangen</p>
+        </div>
+        <div class="input-group">
+            <label for="usernameInput">Benutzername</label>
+            <input 
+                type="text" 
+                id="usernameInput" 
+                placeholder="Dein Name" 
+                autocomplete="off"
+                maxlength="20"
+            >
+        </div>
+        <button class="login-btn" id="loginBtn">Einloggen</button>
+        <div class="error-message" id="errorMessage"></div>
+    </div>
+
+    <!-- Main Chat Container -->
+    <div class="main-container hidden" id="mainContainer">
+        <!-- Sidebar Overlay -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2 id="sidebarUsername">Chat</h2>
+                <div class="user-badge-status">
+                    <div class="user-badge-dot"></div>
+                    <span>Online</span>
+                </div>
+            </div>
+
+            <div class="sidebar-content">
+                <div class="sidebar-section">
+                    <div class="sidebar-section-title">Chats</div>
+                    <div id="sidebarChats"></div>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <button class="logout-btn" id="logoutBtnSidebar">Abmelden</button>
+            </div>
+        </div>
+
+        <!-- Users List -->
+        <div class="users-panel" id="usersPanel">
+            <div class="users-header">
+                <h2>Nutzer</h2>
+                <button class="menu-btn" id="menuBtn">☰</button>
+            </div>
+            <div class="users-list-container" id="usersList"></div>
+        </div>
+
+        <!-- Chat Panel -->
+        <div class="chat-panel" id="chatPanel">
+            <div class="chat-header">
+                <button class="back-btn" id="backBtn">← Zurück</button>
+                <h2 id="chatUserName">Chat</h2>
+                <div class="chat-user-status" id="chatUserStatus"></div>
+            </div>
+
+            <div class="messages-container" id="messagesContainer">
+                <div class="empty-state">Wähle einen Nutzer aus</div>
+            </div>
+
+            <div class="input-container">
+                <div class="message-input-group">
+                    <input 
+                        type="text" 
+                        id="messageInput" 
+                        placeholder="Nachricht..." 
+                        autocomplete="off"
+                        maxlength="500"
+                    >
+                    <button class="send-btn" id="sendBtn">⬆</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let currentUser = null;
+        let selectedUser = null;
+        let clientId = 'client-' + Math.random().toString(36).substr(2, 9);
+        let ably = null;
+        let channels = {};
+        let usersList = new Set();
+        let userPresence = {};
+
+        // DOM Elements
+        const loginContainer = document.getElementById('loginContainer');
+        const mainContainer = document.getElementById('mainContainer');
+        const usersPanel = document.getElementById('usersPanel');
+        const chatPanel = document.getElementById('chatPanel');
+        const usernameInput = document.getElementById('usernameInput');
+        const loginBtn = document.getElementById('loginBtn');
+        const logoutBtnSidebar = document.getElementById('logoutBtnSidebar');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const messagesContainer = document.getElementById('messagesContainer');
+        const userListEl = document.getElementById('usersList');
+        const chatUserName = document.getElementById('chatUserName');
+        const backBtn = document.getElementById('backBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        const chatUserStatus = document.getElementById('chatUserStatus');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        const menuBtn = document.getElementById('menuBtn');
+        const sidebarUsername = document.getElementById('sidebarUsername');
+        const sidebarChats = document.getElementById('sidebarChats');
+
+        // Initialize Ably
+        function initializeAbly() {
+            try {
+                ably = new Ably.Realtime({
+                    key: 'gPoWRg.Y546yg:qL8AfiqUoyOqnbeK_vFkTbavmXUY9k0bbNx97jza4as',
+                    clientId: clientId,
+                    autoConnect: true
+                });
+
+                ably.connection.on('connected', () => {
+                    console.log('✓ Connected');
+                });
+
+                ably.connection.on('failed', () => {
+                    showError('Verbindungsfehler');
+                });
+            } catch (error) {
+                console.error('Ably Error:', error);
+                showError('Fehler beim Laden');
+            }
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.classList.add('show');
+            setTimeout(() => {
+                errorMessage.classList.remove('show');
+            }, 4000);
+        }
+
+        // Sidebar Toggle
+        menuBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('active');
+            sidebarOverlay.classList.toggle('active');
+        });
+
+        sidebarOverlay.addEventListener('click', () => {
+            sidebar.classList.remove('active');
+            sidebarOverlay.classList.remove('active');
+        });
+
+        // Login
+        loginBtn.addEventListener('click', handleLogin);
+        usernameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleLogin();
+        });
+
+        function handleLogin() {
+            const username = usernameInput.value.trim();
+            
+            if (username.length < 1 || username.length > 20) {
+                showError('Name muss 1-20 Zeichen lang sein');
+                return;
+            }
+
+            if (!ably || ably.connection.state !== 'connected') {
+                showError('Verbindung wird hergestellt...');
+                return;
+            }
+
+            currentUser = username;
+            loginBtn.disabled = true;
+
+            try {
+                sidebarUsername.textContent = username;
+
+                // Subscribe to presence channel
+                const presenceChannel = ably.channels.get('presence');
+                presenceChannel.presence.enter({ name: username }, () => {
+                    // Listen to presence updates
+                    presenceChannel.presence.subscribe('enter', (member) => {
+                        if (member.clientId !== clientId) {
+                            usersList.add(member.data.name);
+                            userPresence[member.data.name] = true;
+                            updateUsersList();
+                        }
+                    });
+
+                    presenceChannel.presence.subscribe('leave', (member) => {
+                        usersList.delete(member.data.name);
+                        delete userPresence[member.data.name];
+                        updateUsersList();
+                        if (selectedUser === member.data.name) {
+                            backBtn.click();
+                        }
+                    });
+
+                    presenceChannel.presence.get((members) => {
+                        members.forEach((member) => {
+                            if (member.clientId !== clientId) {
+                                usersList.add(member.data.name);
+                                userPresence[member.data.name] = true;
+                            }
+                        });
+                        updateUsersList();
+                    });
+                });
+
+                // Switch UI
+                loginContainer.classList.add('hidden');
+                mainContainer.classList.remove('hidden');
+                usernameInput.value = '';
+                
+            } catch (error) {
+                console.error('Login Error:', error);
+                showError('Fehler beim Einloggen');
+                loginBtn.disabled = false;
+            }
+        }
+
+        function updateUsersList() {
+            userListEl.innerHTML = '';
+            
+            Array.from(usersList).sort().forEach(username => {
+                const userEl = document.createElement('div');
+                userEl.className = 'user-item' + (selectedUser === username ? ' active' : '');
+                userEl.innerHTML = `
+                    <div class="user-badge-online"></div>
+                    <div class="user-item-name">${escapeHtml(username)}</div>
+                `;
+                userEl.addEventListener('click', () => openChat(username));
+                userListEl.appendChild(userEl);
+            });
+
+            updateSidebarChats();
+        }
+
+        function updateSidebarChats() {
+            sidebarChats.innerHTML = '';
+            
+            Array.from(usersList).sort().forEach(username => {
+                const chatEl = document.createElement('div');
+                chatEl.className = 'chat-item' + (selectedUser === username ? ' active' : '');
+                chatEl.innerHTML = `
+                    <div class="chat-item-badge"></div>
+                    <div class="chat-item-name">${escapeHtml(username)}</div>
+                `;
+                chatEl.addEventListener('click', () => {
+                    openChat(username);
+                    sidebar.classList.remove('active');
+                    sidebarOverlay.classList.remove('active');
+                });
+                sidebarChats.appendChild(chatEl);
+            });
+        }
+
+        function openChat(username) {
+            selectedUser = username;
+            chatUserName.textContent = username;
+            chatUserStatus.style.background = userPresence[username] ? '#34c759' : '#999';
+            messagesContainer.innerHTML = '<div class="empty-state">Laden...</div>';
+            chatPanel.classList.add('active');
+
+            const channelName = [currentUser, username].sort().join('-');
+            
+            if (!channels[channelName]) {
+                channels[channelName] = ably.channels.get(channelName);
+                
+                // Load history
+                channels[channelName].history({ limit: 50 }, (err, result) => {
+                    if (!err && result.items) {
+                        messagesContainer.innerHTML = '';
+                        result.items.reverse().forEach(msg => {
+                            renderMessage(msg.data.username, msg.data.text, msg.data.username === currentUser);
+                        });
+                    }
+                    
+                    // Subscribe to new messages
+                    channels[channelName].subscribe('message', (message) => {
+                        const data = message.data;
+                        renderMessage(data.username, data.text, data.username === currentUser);
+                    });
+                });
+            }
+
+            updateUsersList();
+            messageInput.focus();
+        }
+
+        // Back Button
+        backBtn.addEventListener('click', () => {
+            selectedUser = null;
+            chatPanel.classList.remove('active');
+            updateUsersList();
+        });
+
+        // Send Message
+        sendBtn.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            
+            if (!text || !selectedUser) return;
+            
+            const channelName = [currentUser, selectedUser].sort().join('-');
+            const channel = channels[channelName];
+            
+            if (!channel) return;
+            
+            channel.publish('message', {
+                username: currentUser,
+                text: text,
+                timestamp: new Date().toISOString()
+            }, (err) => {
+                if (err) {
+                    showError('Fehler beim Senden');
+                }
+            });
+
+            messageInput.value = '';
+            messageInput.focus();
+        }
+
+        function renderMessage(username, text, isOwn) {
+            if (messagesContainer.querySelector('.empty-state')) {
+                messagesContainer.innerHTML = '';
+            }
+
+            const messageEl = document.createElement('div');
+            messageEl.className = `message ${isOwn ? 'own' : ''}`;
+            
+            messageEl.innerHTML = `
+                <div class="message-content">
+                    <div class="message-username">${escapeHtml(username)}</div>
+                    <div class="message-bubble">${escapeHtml(text)}</div>
+                </div>
+            `;
+            
+            messagesContainer.appendChild(messageEl);
+
+            setTimeout(() => {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }, 0);
+        }
+
+        // Logout
+        logoutBtnSidebar.addEventListener('click', () => {
+            if (ably) {
+                const presenceChannel = ably.channels.get('presence');
+                presenceChannel.presence.leave();
+            }
+            
+            currentUser = null;
+            selectedUser = null;
+            usersList.clear();
+            channels = {};
+            
+            mainContainer.classList.add('hidden');
+            chatPanel.classList.remove('active');
+            sidebar.classList.remove('active');
+            sidebarOverlay.classList.remove('active');
+            loginContainer.classList.remove('hidden');
+            usernameInput.value = '';
+            loginBtn.disabled = false;
+            usernameInput.focus();
+        });
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Start
+        initializeAbly();
+        usernameInput.focus();
+    </script>
+</body>
+</html>
